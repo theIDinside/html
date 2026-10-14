@@ -101787,6 +101787,20 @@ interface <dfn interface>NavigationHistoryEntry</dfn> : <span>EventTarget</span>
       promise</span> for <var>apiMethodTracker</var> with a new
       <span>"<code>SecurityError</code>"</span> <code>DOMException</code> created in
       <var>navigation</var>'s <span data-x="concept-relevant-realm">relevant realm</span>.</p>
+     </li>
+
+     <li>
+      <p>If <var>result</var> is "<code data-x="">target-removed</code>", then <span>queue a global
+      task</span> on the <span>navigation and traversal task source</span> given
+      <var>navigation</var>'s <span>relevant global object</span> to run these steps:</p>
+
+      <ol>
+       <li><p>If <var>navigation</var>'s <span>upcoming traverse API method
+       trackers</span>[<var>key</var>] <span data-x="map exists">exists</span>, then <span>reject
+       the finished promise</span> for <var>apiMethodTracker</var> with a new
+       <span>"<code>AbortError</code>"</span> <code>DOMException</code> created in
+       <var>navigation</var>'s <span data-x="concept-relevant-realm">relevant realm</span>.</p></li>
+      </ol>
 
       <div class="note">
        <p>When <var>result</var> is "<code data-x="">canceled-by-beforeunload</code>" or "<code
@@ -101800,6 +101814,13 @@ interface <dfn interface>NavigationHistoryEntry</dfn> : <span>EventTarget</span>
        data-x="event-navigate">navigate</code> <em>is</em> fired, but the <span>inner <code
        data-x="event-navigate">navigate</code> event firing algorithm</span> will take care of
        <span data-x="abort the ongoing navigation">aborting the ongoing navigation</span>.</p>
+
+       <p>In the "<code data-x="">target-removed</code>" case, <code
+       data-x="event-navigate">navigate</code> is usually not fired, because the destination was
+       removed before it could be. If it was fired, the <span>inner <code
+       data-x="event-navigate">navigate</code> event firing algorithm</span> took
+       <var>apiMethodTracker</var> out of <var>navigation</var>'s <span>upcoming traverse API method
+       trackers</span>, and it is not rejected here.</p>
       </div>
      </li>
     </ol>
@@ -103348,6 +103369,27 @@ interface <dfn interface>NavigationDestination</dfn> {
   data-x="uni-none">none</code>"):</p>
 
   <ol>
+   <li><p>Let <var>destinationNHE</var> be the <code>NavigationHistoryEntry</code> in
+   <var>navigation</var>'s <span data-x="navigation-entry-list">entry list</span> whose <span
+   data-x="nhe-she">session history entry</span> is <var>destinationSHE</var>, or null if no such
+   <code>NavigationHistoryEntry</code> exists.</p></li>
+
+   <li><p>Let <var>isSameDocument</var> be true if <var>destinationSHE</var>'s <span
+   data-x="she-document">document</span> is equal to <var>navigation</var>'s <span>relevant global
+   object</span>'s <span data-x="concept-document-window">associated <code>Document</code></span>;
+   otherwise false.</p></li>
+
+   <li>
+    <p>If <var>isSameDocument</var> is true and <var>destinationNHE</var> is null, then return
+    true.</p>
+
+    <p class="note">This occurs if a <span data-x="finalize a same-document navigation">synchronous
+    navigation</span> disposed of the destination entry while the traversal was in flight. No event
+    is fired for a destination that no longer exists; <span>apply the history step</span> will
+    abort the traversal once it has processed that synchronous navigation, and report it as "<code
+    data-x="">target-removed</code>".</p>
+   </li>
+
    <li><p>Let <var>event</var> be the result of <span>creating an event</span> given
    <code>NavigateEvent</code>, in <var>navigation</var>'s <span
    data-x="concept-relevant-realm">relevant realm</span>.</p></li>
@@ -103362,11 +103404,6 @@ interface <dfn interface>NavigationDestination</dfn> {
 
    <li><p>Set <var>destination</var>'s <span data-x="concept-NavigationDestination-url">URL</span>
    to <var>destinationSHE</var>'s <span data-x="she-url">URL</span>.</p></li>
-
-   <li><p>Let <var>destinationNHE</var> be the <code>NavigationHistoryEntry</code> in
-   <var>navigation</var>'s <span data-x="navigation-entry-list">entry list</span> whose <span
-   data-x="nhe-she">session history entry</span> is <var>destinationSHE</var>, or null if no such
-   <code>NavigationHistoryEntry</code> exists.</p></li>
 
    <li>
     <p>If <var>destinationNHE</var> is non-null:</p>
@@ -103396,10 +103433,7 @@ interface <dfn interface>NavigationDestination</dfn> {
    </li>
 
    <li><p>Set <var>destination</var>'s <span data-x="concept-NavigationDestination-sameDocument">is
-   same document</span> to true if <var>destinationSHE</var>'s <span
-   data-x="she-document">document</span> is equal to <var>navigation</var>'s <span>relevant global
-   object</span>'s <span data-x="concept-document-window">associated <code>Document</code></span>;
-   otherwise false.</p></li>
+   same document</span> to <var>isSameDocument</var>.</p></li>
 
    <li><p>Return the result of performing the <span>inner <code
    data-x="event-navigate">navigate</code> event firing algorithm</span> given
@@ -111630,8 +111664,8 @@ location.href = '#foo';</code></pre>
   <var>initiatorToCheck</var>, <span>user navigation involvement</span> <var>userInvolvement</var>,
   and <code>NavigationType</code>-or-null <var>navigationType</var>, perform the following steps.
   They return "<code data-x="">initiator-disallowed</code>", "<code
-  data-x="">canceled-by-beforeunload</code>", "<code data-x="">canceled-by-navigate</code>", or
-  "<code data-x="">applied</code>".</p>
+  data-x="">canceled-by-beforeunload</code>", "<code data-x="">canceled-by-navigate</code>", "<code
+  data-x="">target-removed</code>", or "<code data-x="">applied</code>".</p>
 
   <ol>
    <li><p><span>Assert</span>: This is running within <var>traversable</var>'s <span
@@ -111654,6 +111688,36 @@ location.href = '#foo';</code></pre>
     </ol>
    </li>
 
+   <li><p>Let <var>targetEntries</var> be an empty <span>ordered map</span>.</p></li>
+
+   <li>
+    <p>If <var>navigationType</var> is "<code
+    data-x="dom-NavigationType-traverse">traverse</code>":</p>
+
+    <ol>
+     <li><p><span data-x="list iterate">For each</span> <var>navigable</var> of <span>get all
+     navigables whose current session history entry will change or reload</span> given
+     <var>traversable</var> and <var>targetStep</var>: <span data-x="map set">set</span>
+     <var>targetEntries</var>[<var>navigable</var>] to the result of <span>getting the target
+     history entry</span> given <var>navigable</var> and <var>targetStep</var>.</p></li>
+
+     <li><p><span>Process queue-jumping synchronous navigations</span> given
+     <var>traversable</var> and an empty <span>set</span>.</p></li>
+
+     <li><p>If <span>any target history entry was removed</span> given <var>targetEntries</var>,
+     then return "<code data-x="">target-removed</code>".</p></li>
+    </ol>
+
+    <p class="note">This occurs if a <span data-x="finalize a same-document
+    navigation">synchronous navigation</span>, such as one caused by <code
+    data-x="dom-history-pushState">history.pushState()</code> or a <span
+    data-x="navigate-fragid">fragment navigation</span>, was performed before this traversal could
+    be applied, and <span data-x="clear the forward session history">cleared the forward session
+    history</span> containing a target entry. In that case, neither <code
+    data-x="event-beforeunload">beforeunload</code> nor <code
+    data-x="event-navigate">navigate</code> is fired, and no document is populated.</p>
+   </li>
+
    <li><p>Let <var>navigablesCrossingDocuments</var> be the result of <span>getting all navigables
    that might experience a cross-document traversal</span> given <var>traversable</var> and
    <var>targetStep</var>.</p></li>
@@ -111662,6 +111726,25 @@ location.href = '#foo';</code></pre>
    is canceled</span> given <var>navigablesCrossingDocuments</var>, <var>traversable</var>,
    <var>targetStep</var>, and <var>userInvolvement</var> is not "<code data-x="">continue</code>",
    then return that result.</p></li>
+
+   <li>
+    <p>If <var>navigationType</var> is "<code
+    data-x="dom-NavigationType-traverse">traverse</code>":</p>
+
+    <ol>
+     <li><p><span>Process queue-jumping synchronous navigations</span> given
+     <var>traversable</var> and an empty <span>set</span>.</p></li>
+
+     <li><p>If <span>any target history entry was removed</span> given <var>targetEntries</var>,
+     then return "<code data-x="">target-removed</code>".</p></li>
+    </ol>
+
+    <p class="note">This handles synchronous navigations performed by <code
+    data-x="event-beforeunload">beforeunload</code> or <code data-x="event-navigate">navigate</code>
+    event handlers, as well as synchronous navigations whose steps were appended after the previous
+    check. Any synchronous navigation that was performed before those events were fired has
+    appended its steps by this point.</p>
+   </li>
 
    <li><p>Let <var>changingNavigables</var> be the result of <span>get all navigables whose current
    session history entry will change or reload</span> given <var>traversable</var> and
@@ -111712,6 +111795,8 @@ location.href = '#foo';</code></pre>
    <var>changingNavigables</var>.</p></li>
 
    <li><p>Let <var>completedChangeJobs</var> be 0.</p></li>
+
+   <li><p>Let <var>anyChangingNavigableApplied</var> be false.</p></li>
 
    <li>
     <p>Let <var>changingNavigableContinuations</var> be an empty <span>queue</span> of <span
@@ -111969,58 +112054,18 @@ location.href = '#foo';</code></pre>
     <p>While <var>completedChangeJobs</var> does not equal <var>totalChangeJobs</var>:</p>
 
     <ol>
-     <li>
+     <li id="sync-navigations-jump-queue">
       <p>If <var>traversable</var>'s <span data-x="tn-running-nested-apply-history-step">running
-      nested apply history step</span> is false:</p>
+      nested apply history step</span> is false, then <span>process queue-jumping synchronous
+      navigations</span> given <var>traversable</var> and
+      <var>navigablesThatMustWaitBeforeHandlingSyncNavigation</var>.</p>
 
-      <ol>
-       <li id="sync-navigations-jump-queue">
-        <p>While <var>traversable</var>'s <span data-x="tn-session-history-traversal-queue">session
-        history traversal queue</span>'s <span
-        data-x="session-history-traversal-parallel-queue-algorithm-set">algorithm set</span> <span
-        data-x="list contains">contains</span> one or more <span
-        data-x="session-history-traversal-parallel-queue-sync-nav-steps">synchronous navigation
-        steps</span> with a <span
-        data-x="session-history-traversal-parallel-queue-sync-nav-steps-target-nav">target
-        navigable</span> not <span data-x="list contains">contained</span> in
-        <var>navigablesThatMustWaitBeforeHandlingSyncNavigation</var>:</p>
-
-        <ol>
-         <li><p>Let <var>steps</var> be the first <span data-x="list item">item</span> in
-         <var>traversable</var>'s <span data-x="tn-session-history-traversal-queue">session history
-         traversal queue</span>'s <span
-         data-x="session-history-traversal-parallel-queue-algorithm-set">algorithm set</span> that
-         is <span data-x="session-history-traversal-parallel-queue-sync-nav-steps">synchronous
-         navigation steps</span> with a <span
-         data-x="session-history-traversal-parallel-queue-sync-nav-steps-target-nav">target
-         navigable</span> not <span data-x="list contains">contained</span> in
-         <var>navigablesThatMustWaitBeforeHandlingSyncNavigation</var>.</p></li>
-
-         <li><p><span data-x="list remove">Remove</span> <var>steps</var> from
-         <var>traversable</var>'s <span data-x="tn-session-history-traversal-queue">session history
-         traversal queue</span>'s <span
-         data-x="session-history-traversal-parallel-queue-algorithm-set">algorithm
-         set</span>.</p></li>
-
-         <li><p>Set <var>traversable</var>'s <span
-         data-x="tn-running-nested-apply-history-step">running nested apply history step</span> to
-         true.</p></li>
-
-         <li><p>Run <var>steps</var>.</p></li>
-
-         <li><p>Set <var>traversable</var>'s <span
-         data-x="tn-running-nested-apply-history-step">running nested apply history step</span> to
-         false.</p></li>
-        </ol>
-
-        <p class="note">Synchronous navigations that are intended to take place before this
-        traversal jump the queue at this point, so they can be added to the correct place in
-        <var>traversable</var>'s <span data-x="tn-session-history-entries">session history
-        entries</span> before this traversal potentially unloads their document. <a
-        href="#sync-navigation-steps-queue-jumping-examples">More details can be found
-        here</a>.</p>
-       </li>
-      </ol>
+      <p class="note">Synchronous navigations that are intended to take place before this
+      traversal jump the queue at this point, so they can be added to the correct place in
+      <var>traversable</var>'s <span data-x="tn-session-history-entries">session history
+      entries</span> before this traversal potentially unloads their document. <a
+      href="#sync-navigation-steps-queue-jumping-examples">More details can be found
+      here</a>.</p>
      </li>
 
      <li id="continuations-dequeue"><p>Let <var>changingNavigableContinuation</var> be the result
@@ -112038,6 +112083,45 @@ location.href = '#foo';</code></pre>
 
      <li><p>Let <var>navigable</var> be <var>changingNavigableContinuation</var>'s <span
      data-x="changing-nav-continuation-navigable">navigable</span>.</p></li>
+
+     <li>
+      <p>If <var>navigationType</var> is "<code
+      data-x="dom-NavigationType-traverse">traverse</code>":</p>
+
+      <ol>
+       <li>
+        <p>If the result of <span>getting session history entries</span> for <var>navigable</var>
+        does not <span data-x="list contains">contain</span> <var>targetEntry</var>:</p>
+
+        <ol>
+         <li><p>Set <var>navigable</var>'s <span>ongoing navigation</span> to null.</p></li>
+
+         <li><p>Increment <var>completedChangeJobs</var>.</p></li>
+
+         <li><p><span>Continue</span>.</p></li>
+        </ol>
+
+        <p class="note">This occurs if a <span data-x="finalize a same-document
+        navigation">synchronous navigation</span> that jumped the queue <span data-x="clear the
+        forward session history">cleared the forward session history</span> containing
+        <var>targetEntry</var>, e.g., while its <span data-x="she-document">document</span> was
+        being <span data-x="attempt to populate the history entry's document">populated</span>.
+        <var>targetEntry</var> is not activated, and <var>displayedDocument</var> is not
+        unloaded.</p>
+       </li>
+
+       <li>
+        <p>Set <var>navigable</var>'s <span data-x="nav-current-history-entry">current session
+        history entry</span> to <var>targetEntry</var>.</p>
+
+        <p class="note">A synchronous navigation that jumped the queue might have changed
+        <var>navigable</var>'s <span data-x="nav-current-history-entry">current session history
+        entry</span> through a nested call to <span>apply the history step</span>.</p>
+       </li>
+      </ol>
+     </li>
+
+     <li><p>Set <var>anyChangingNavigableApplied</var> to true.</p></li>
 
      <li>
       <p>Let (<var>scriptHistoryLength</var>, <var>scriptHistoryIndex</var>) be the result of
@@ -112129,6 +112213,17 @@ location.href = '#foo';</code></pre>
    </li>
 
    <li>
+    <p>If <var>changingNavigables</var> is not <span data-x="list is empty">empty</span> and
+    <var>anyChangingNavigableApplied</var> is false, then return "<code
+    data-x="">target-removed</code>".</p>
+
+    <p class="note">In this case <var>traversable</var>'s <span
+    data-x="tn-current-session-history-step">current session history step</span> has already been
+    updated by the synchronous navigations that removed the target entries, so it is not set to
+    <var>targetStep</var>.</p>
+   </li>
+
+   <li>
     <p>Let <var>totalNonchangingJobs</var> be the <span data-x="list size">size</span> of
     <var>nonchangingNavigablesThatStillNeedUpdates</var>.</p>
 
@@ -112170,6 +112265,73 @@ location.href = '#foo';</code></pre>
    session history step</span> to <var>targetStep</var>.</p></li>
 
    <li><p>Return "<code data-x="">applied</code>".</p></li>
+  </ol>
+  </div>
+
+  <div algorithm>
+  <p>To <dfn>process queue-jumping synchronous navigations</dfn> given a <span>traversable
+  navigable</span> <var>traversable</var> and a <span>set</span> of <span
+  data-x="navigable">navigables</span> <var>navigablesThatMustWait</var>:</p>
+
+  <ol>
+   <li><p><span>Assert</span>: <var>traversable</var>'s <span
+   data-x="tn-running-nested-apply-history-step">running nested apply history step</span> is
+   false.</p></li>
+
+   <li>
+    <p>While <var>traversable</var>'s <span data-x="tn-session-history-traversal-queue">session
+    history traversal queue</span>'s <span
+    data-x="session-history-traversal-parallel-queue-algorithm-set">algorithm set</span> <span
+    data-x="list contains">contains</span> one or more <span
+    data-x="session-history-traversal-parallel-queue-sync-nav-steps">synchronous navigation
+    steps</span> with a <span
+    data-x="session-history-traversal-parallel-queue-sync-nav-steps-target-nav">target
+    navigable</span> not <span data-x="list contains">contained</span> in
+    <var>navigablesThatMustWait</var>:</p>
+
+    <ol>
+     <li><p>Let <var>steps</var> be the first <span data-x="list item">item</span> in
+     <var>traversable</var>'s <span data-x="tn-session-history-traversal-queue">session history
+     traversal queue</span>'s <span
+     data-x="session-history-traversal-parallel-queue-algorithm-set">algorithm set</span> that
+     is <span data-x="session-history-traversal-parallel-queue-sync-nav-steps">synchronous
+     navigation steps</span> with a <span
+     data-x="session-history-traversal-parallel-queue-sync-nav-steps-target-nav">target
+     navigable</span> not <span data-x="list contains">contained</span> in
+     <var>navigablesThatMustWait</var>.</p></li>
+
+     <li><p><span data-x="list remove">Remove</span> <var>steps</var> from
+     <var>traversable</var>'s <span data-x="tn-session-history-traversal-queue">session history
+     traversal queue</span>'s <span
+     data-x="session-history-traversal-parallel-queue-algorithm-set">algorithm
+     set</span>.</p></li>
+
+     <li><p>Set <var>traversable</var>'s <span
+     data-x="tn-running-nested-apply-history-step">running nested apply history step</span> to
+     true.</p></li>
+
+     <li><p>Run <var>steps</var>.</p></li>
+
+     <li><p>Set <var>traversable</var>'s <span
+     data-x="tn-running-nested-apply-history-step">running nested apply history step</span> to
+     false.</p></li>
+    </ol>
+   </li>
+  </ol>
+  </div>
+
+  <div algorithm>
+  <p>To determine if <dfn>any target history entry was removed</dfn> given an <span>ordered
+  map</span> <var>targetEntries</var> from <span data-x="navigable">navigables</span> to <span
+  data-x="session history entry">session history entries</span>:</p>
+
+  <ol>
+   <li><p><span data-x="map iterate">For each</span> <var>navigable</var> → <var>entry</var> of
+   <var>targetEntries</var>: if the result of <span>getting session history entries</span> for
+   <var>navigable</var> does not <span data-x="list contains">contain</span> <var>entry</var>, then
+   return true.</p></li>
+
+   <li><p>Return false.</p></li>
   </ol>
   </div>
 
